@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ice Cream Spinner</title>
+
+<style>
+body{
+  margin:0;
+  height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: radial-gradient(circle,#111,#000);
+  font-family:Arial;
+  color:#fff;
+}
+
+.wrap{
+  text-align:center;
+}
+
+.wheel-box{
+  position:relative;
+  width:90vw;
+  max-width:350px;
+  aspect-ratio:1/1;
+}
+
+canvas{
+  width:100%;
+  height:100%;
+  border-radius:50%;
+  border:8px solid gold;
+  box-shadow:0 0 30px rgba(255,215,0,0.4);
+}
+
+.pointer{
+  position:absolute;
+  top:-12px;
+  left:50%;
+  transform:translateX(-50%);
+  width:0;
+  height:0;
+  border-left:12px solid transparent;
+  border-right:12px solid transparent;
+  border-bottom:22px solid red;
+}
+
+button{
+  margin-top:20px;
+  padding:12px 25px;
+  font-size:18px;
+  font-weight:bold;
+  border:none;
+  border-radius:10px;
+  background:gold;
+  cursor:pointer;
+}
+
+.popup{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,0.5);
+}
+
+.card{
+  background:#111;
+  padding:20px;
+  border-radius:15px;
+  text-align:center;
+  border:1px solid gold;
+  box-shadow:0 0 30px rgba(255,215,0,0.3);
+}
+
+.card h2{
+  color:gold;
+}
+
+.close{
+  margin-top:15px;
+  padding:8px 16px;
+  border:none;
+  background:gold;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+  <div class="wheel-box">
+    <div class="pointer"></div>
+    <canvas id="wheel"></canvas>
+  </div>
+  <button id="spin">SPIN</button>
+</div>
+
+<div class="popup" id="popup">
+  <div class="card">
+    <h2>🎉 Congratulations</h2>
+    <p id="result"></p>
+    <button class="close" onclick="closePopup()">OK</button>
+  </div>
+</div>
+
+<script>
+const OPTIONS = [
+  "Vanilla Ice Cream",
+  "Butterscotch Ice Cream",
+  "American Nuts",
+  "Buy 1 Get 1 Free",
+  "Special Rabdi",
+  "Badam Shake"
+];
+
+const canvas = document.getElementById("wheel");
+const ctx = canvas.getContext("2d");
+const spinBtn = document.getElementById("spin");
+
+function resize(){
+  const size = canvas.parentElement.clientWidth * 2;
+  canvas.width = size;
+  canvas.height = size;
+}
+resize();
+window.onresize = resize;
+
+const N = OPTIONS.length;
+const ARC = (Math.PI * 2) / N;
+
+let angle = 0;
+let spinning = false;
+
+let audioCtx;
+function tick(){
+  if(!audioCtx) audioCtx = new AudioContext();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.frequency.value = 800;
+  g.gain.value = 0.05;
+  o.connect(g).connect(audioCtx.destination);
+  o.start();
+  o.stop(audioCtx.currentTime+0.05);
+}
+
+function winSound(){
+  if(!audioCtx) audioCtx = new AudioContext();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.frequency.setValueAtTime(400,audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(900,audioCtx.currentTime+0.3);
+  g.gain.value = 0.1;
+  o.connect(g).connect(audioCtx.destination);
+  o.start();
+  o.stop(audioCtx.currentTime+0.4);
+}
+
+function draw(){
+  const cx = canvas.width/2;
+  const cy = canvas.height/2;
+  const r = canvas.width/2;
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(angle);
+  ctx.translate(-cx,-cy);
+
+  for(let i=0;i<N;i++){
+    const start = i*ARC;
+    const end = start+ARC;
+
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,start,end);
+    ctx.fillStyle = i%2 ? "#ffd966" : "#e6b84d";
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(start+ARC/2);
+    ctx.fillStyle="#000";
+    ctx.font="bold "+(canvas.width*0.04)+"px Arial";
+    ctx.textAlign="center";
+    ctx.fillText(OPTIONS[i], r*0.6,0);
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function pick(){
+  const weights = OPTIONS.map(opt =>
+    opt==="Special Rabdi"?1:
+    opt==="Badam Shake"?2:7
+  );
+
+  let total=weights.reduce((a,b)=>a+b,0);
+  let r=Math.random()*total;
+
+  let acc=0;
+  for(let i=0;i<weights.length;i++){
+    acc+=weights[i];
+    if(r<=acc) return i;
+  }
+}
+
+function spin(){
+  if(spinning) return;
+  spinning=true;
+
+  let win = pick();
+
+  let target = Math.PI*2*6 + (Math.PI*1.5 - (win*ARC+ARC/2));
+
+  let start = performance.now();
+
+  function anim(now){
+    let t = Math.min(1,(now-start)/4000);
+    let eased = 1-Math.pow(1-t,3);
+
+    angle = target*eased;
+    draw();
+    tick();
+
+    if(t<1){
+      requestAnimationFrame(anim);
+    }else{
+      winSound();
+      showResult(OPTIONS[win]);
+      spinning=false;
+    }
+  }
+
+  requestAnimationFrame(anim);
+}
+
+function showResult(text){
+  document.getElementById("result").innerText = text;
+  document.getElementById("popup").style.display="flex";
+}
+
+function closePopup(){
+  document.getElementById("popup").style.display="none";
+}
+
+draw();
+spinBtn.onclick = spin;
+</script>
+
+</body>
+</html>
